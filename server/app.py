@@ -90,6 +90,34 @@ def upload():
 	return jsonify({"ok": True, "output": str(output_dir)})
 
 
+@app.post("/skipped")
+def skipped():
+	data = request.get_json(force=True, silent=True)
+	if not isinstance(data, dict):
+		return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+
+	requested = data.get("outputFolderName")
+	base = requested if isinstance(requested, str) and len(requested.strip()) > 0 else None
+	default_env = os.environ.get("RBX_PARSE_OUT")
+	output_root = base or default_env or "output"
+	output_dir = Path(output_root).resolve()
+	output_dir.mkdir(parents=True, exist_ok=True)
+
+	skipped_list = data.get("skipped") or []
+	log_path = output_dir / "skipped.txt"
+
+	with log_path.open("a", encoding="utf-8") as f:
+		for entry in skipped_list:
+			service = entry.get("service", "?")
+			name = entry.get("name", "?")
+			cls = entry.get("class", "?")
+			path = "/".join(entry.get("path", []))
+			reason = entry.get("reason", "unknown")
+			f.write(f"{service}/{path}/{name} [{cls}] - {reason}\n")
+
+	return jsonify({"ok": True, "wrote": len(skipped_list)})
+
+
 if __name__ == "__main__":
 	app.run(host="127.0.0.1", port=5000, debug=False)
 
