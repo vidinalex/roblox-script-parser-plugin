@@ -467,6 +467,22 @@ local function buildChunkPayload(basePayload, entries)
     }
 end
 
+local function buildSkippedPayload(basePayload, skipped)
+    return {
+        studioPlaceName = basePayload.studioPlaceName,
+        generatedAt = basePayload.generatedAt,
+        outputFolderName = basePayload.outputFolderName,
+        skipped = skipped,
+    }
+end
+
+local function postSkipped(url, basePayload, skipped)
+    if #skipped == 0 then return true, nil end
+    local skippedUrl = string.gsub(url, "/upload$", "/skipped")
+    local payload = buildSkippedPayload(basePayload, skipped)
+    return postToServer(skippedUrl, payload)
+end
+
 local function postInChunks(url, basePayload)
     local entries = flattenEntries(basePayload.roots or {})
     local total = #entries
@@ -475,6 +491,8 @@ local function postInChunks(url, basePayload)
     end
 
     local maxBytes = 900 * 1024 -- stay under 1MB
+    local maxEntryBytes = 800 * 1024
+    local skipped = {}
     local i = 1
     local lastResp = nil
     while i <= total do
@@ -482,26 +500,49 @@ local function postInChunks(url, basePayload)
         local j = i
         local _sizeOk = true
         while j <= total do
-            table.insert(chunk, entries[j])
-            local testPayload = buildChunkPayload(basePayload, chunk)
-            local okEncode, encoded = pcall(function()
-                return HttpService:JSONEncode(testPayload)
+            local candidate = entries[j]
+            -- Pre-test single entry size/encodability
+            local singleOk, singleJson = pcall(function()
+                return HttpService:JSONEncode(buildChunkPayload(basePayload, { candidate }))
             end)
-            if not okEncode then
-                return false, "JSON encode failed"
-            end
-            if #encoded > maxBytes then
-                -- if first entry already exceeds limit, send it alone and hope server accepts
-                if j == i then
-                    -- send single large
-                    chunk = { entries[j] }
-                else
-                    -- remove last added and send previous
-                    table.remove(chunk, #chunk)
-                end
-                break
-            else
+            if not singleOk or #singleJson > maxEntryBytes then
+                table.insert(skipped, {
+                    service = candidate.service,
+                    name = candidate.item.name,
+                    class = candidate.item.class,
+                    path = candidate.item.path,
+                    reason = singleOk and "entry too large" or "json encode failed",
+                })
                 j += 1
+            else
+                table.insert(chunk, candidate)
+                local testPayload = buildChunkPayload(basePayload, chunk)
+                local okEncode, encoded = pcall(function()
+                    return HttpService:JSONEncode(testPayload)
+                end)
+                if not okEncode then
+                    -- remove and skip this one
+                    table.remove(chunk, #chunk)
+                    table.insert(skipped, {
+                        service = candidate.service,
+                        name = candidate.item.name,
+                        class = candidate.item.class,
+                        path = candidate.item.path,
+                        reason = "json encode failed",
+                    })
+                    j += 1
+                elseif #encoded > maxBytes then
+                -- if first entry already exceeds limit, send it alone and hope server accepts
+                    if j == i then
+                        chunk = { candidate }
+                        j += 1
+                    else
+                        table.remove(chunk, #chunk)
+                    end
+                    break
+                else
+                    j += 1
+                end
             end
         end
 
@@ -519,6 +560,8 @@ local function postInChunks(url, basePayload)
         setProgressAlpha(alpha)
         i = sentCount + 1
     end
+    -- send skipped metadata if any
+    postSkipped(url, basePayload, skipped)
     return true, lastResp
 end
 
