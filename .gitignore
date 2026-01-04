@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Export outputs (can be large/noisy)
+output/
+*_output/
+
