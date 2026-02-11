@@ -10,6 +10,7 @@ app = Flask(__name__)
 
 MANIFEST_FILENAME = ".parser_manifest.json"
 README_FILENAME = "README_Parser.md"
+PROJECTS_DIRNAME = "projects"
 
 
 def _normalize_number(value):
@@ -320,7 +321,7 @@ def resolve_output_dir(data: dict) -> Path:
 
 	output_path = Path(output_root)
 	if not output_path.is_absolute():
-		output_path = repo_root() / output_path
+		output_path = repo_root() / PROJECTS_DIRNAME / output_path
 	output_dir = output_path.resolve()
 	output_dir.mkdir(parents=True, exist_ok=True)
 	return output_dir
