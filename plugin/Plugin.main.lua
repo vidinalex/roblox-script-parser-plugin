@@ -51,6 +51,7 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local ScriptEditorService = nil
 pcall(function()
@@ -116,6 +117,51 @@ local function wireButtonStyle(btn, baseColor, hoverColor, downColor, baseScale,
 	end)
 end
 
+local function trimText(value)
+	local text = tostring(value or "")
+	return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function sanitizeOutputFolderBase(name)
+	local text = trimText(name)
+	text = text:gsub("[%z\1-\31]", "")
+	text = text:gsub("[<>:\"/\\|%?%*]", "")
+	text = trimText(text)
+	if #text == 0 then
+		return "output"
+	end
+	return text
+end
+
+local function suggestedOutputFolderName(projectName)
+	local base = sanitizeOutputFolderBase(projectName)
+	if base == "output" then
+		return base
+	end
+	return base .. "_output"
+end
+
+local function fetchPublishedPlaceName()
+	if game.PlaceId <= 0 then
+		return nil
+	end
+	local ok, info = pcall(function()
+		return MarketplaceService:GetProductInfo(game.PlaceId, Enum.InfoType.Asset)
+	end)
+	if not ok or type(info) ~= "table" then
+		return nil
+	end
+	local name = info.Name
+	if type(name) ~= "string" then
+		return nil
+	end
+	name = trimText(name)
+	if #name == 0 then
+		return nil
+	end
+	return name
+end
+
 -- UI
 local main = Instance.new("CanvasGroup")
 main.Name = "MainGroup"
@@ -157,21 +203,54 @@ settingsPad.PaddingTop = UDim.new(0, 10)
 settingsPad.PaddingBottom = UDim.new(0, 10)
 settingsPad.Parent = settings
 
+local settingsToggle = Instance.new("TextButton")
+settingsToggle.Name = "SettingsToggle"
+settingsToggle.Size = UDim2.new(1, 0, 0, 24)
+settingsToggle.Position = UDim2.fromOffset(0, 0)
+settingsToggle.BackgroundColor3 = DARK_BG
+settingsToggle.BorderSizePixel = 0
+settingsToggle.AutoButtonColor = false
+settingsToggle.Text = "Settings >"
+settingsToggle.TextColor3 = TEXT
+settingsToggle.TextXAlignment = Enum.TextXAlignment.Left
+settingsToggle.Font = Enum.Font.GothamBold
+settingsToggle.TextSize = 12
+settingsToggle.Parent = settings
+
+local settingsToggleCorner = Instance.new("UICorner")
+settingsToggleCorner.CornerRadius = UDim.new(0, 6)
+settingsToggleCorner.Parent = settingsToggle
+
+local settingsToggleStroke = Instance.new("UIStroke")
+settingsToggleStroke.Thickness = 1
+settingsToggleStroke.Color = ACCENT
+settingsToggleStroke.Transparency = 0.7
+settingsToggleStroke.Parent = settingsToggle
+wireButtonStyle(settingsToggle, DARK_BG, HOVER_BG, TREE_BG, 1, 1, 1)
+
+local settingsBody = Instance.new("Frame")
+settingsBody.Name = "SettingsBody"
+settingsBody.Size = UDim2.new(1, 0, 0, 88)
+settingsBody.Position = UDim2.fromOffset(0, 28)
+settingsBody.BackgroundTransparency = 1
+settingsBody.Visible = false
+settingsBody.Parent = settings
+
 local hostLabel = Instance.new("TextLabel")
-hostLabel.Size = UDim2.new(1, 0, 0, 18)
+hostLabel.Size = UDim2.new(1, 0, 0, 16)
 hostLabel.Position = UDim2.fromOffset(0, 0)
 hostLabel.BackgroundTransparency = 1
 hostLabel.Text = "Python server (http):"
 hostLabel.TextColor3 = TEXT
 hostLabel.TextXAlignment = Enum.TextXAlignment.Left
 hostLabel.Font = Enum.Font.Gotham
-hostLabel.TextSize = 12
-hostLabel.Parent = settings
+hostLabel.TextSize = 11
+hostLabel.Parent = settingsBody
 
 local serverInput = Instance.new("TextBox")
 serverInput.Name = "ServerInput"
-serverInput.Size = UDim2.new(1, 0, 0, 28)
-serverInput.Position = UDim2.fromOffset(0, 20)
+serverInput.Size = UDim2.new(1, 0, 0, 24)
+serverInput.Position = UDim2.fromOffset(0, 18)
 serverInput.BackgroundColor3 = INPUT_BG
 serverInput.BorderSizePixel = 0
 serverInput.Text = "http://127.0.0.1:5000/upload"
@@ -180,8 +259,8 @@ serverInput.TextColor3 = TEXT
 serverInput.PlaceholderColor3 = Color3.fromRGB(190, 170, 220)
 serverInput.ClearTextOnFocus = false
 serverInput.Font = Enum.Font.Gotham
-serverInput.TextSize = 14
-serverInput.Parent = settings
+serverInput.TextSize = 13
+serverInput.Parent = settingsBody
 
 local serverInputCorner = Instance.new("UICorner")
 serverInputCorner.CornerRadius = UDim.new(0, 6)
@@ -194,30 +273,35 @@ serverStroke.Transparency = 0.6
 serverStroke.Parent = serverInput
 
 local outLabel = Instance.new("TextLabel")
-outLabel.Size = UDim2.new(1, 0, 0, 18)
-outLabel.Position = UDim2.fromOffset(0, 58)
+outLabel.Size = UDim2.new(1, 0, 0, 16)
+outLabel.Position = UDim2.fromOffset(0, 46)
 outLabel.BackgroundTransparency = 1
 outLabel.Text = "Output folder name:"
 outLabel.TextColor3 = TEXT
 outLabel.TextXAlignment = Enum.TextXAlignment.Left
 outLabel.Font = Enum.Font.Gotham
-outLabel.TextSize = 12
-outLabel.Parent = settings
+outLabel.TextSize = 11
+outLabel.Parent = settingsBody
 
 local outputInput = Instance.new("TextBox")
 outputInput.Name = "OutputInput"
-outputInput.Size = UDim2.new(1, 0, 0, 28)
-outputInput.Position = UDim2.fromOffset(0, 78)
+outputInput.Size = UDim2.new(1, 0, 0, 24)
+outputInput.Position = UDim2.fromOffset(0, 64)
 outputInput.BackgroundColor3 = INPUT_BG
 outputInput.BorderSizePixel = 0
-outputInput.Text = (game.Name and #game.Name > 0) and (game.Name .. "_output") or "output"
-outputInput.PlaceholderText = "output"
+local studioPlaceName = trimText(game.Name)
+if #studioPlaceName == 0 then
+	studioPlaceName = "Place"
+end
+local initialSuggestedOutputName = suggestedOutputFolderName(studioPlaceName)
+outputInput.Text = initialSuggestedOutputName
+outputInput.PlaceholderText = initialSuggestedOutputName
 outputInput.TextColor3 = TEXT
 outputInput.PlaceholderColor3 = Color3.fromRGB(190, 170, 220)
 outputInput.ClearTextOnFocus = false
 outputInput.Font = Enum.Font.Gotham
-outputInput.TextSize = 14
-outputInput.Parent = settings
+outputInput.TextSize = 13
+outputInput.Parent = settingsBody
 
 local outputInputCorner = Instance.new("UICorner")
 outputInputCorner.CornerRadius = UDim.new(0, 6)
@@ -228,6 +312,20 @@ outputStroke.Thickness = 1
 outputStroke.Color = ACCENT
 outputStroke.Transparency = 0.6
 outputStroke.Parent = outputInput
+
+local initialOutputText = outputInput.Text
+task.spawn(function()
+	local publishedName = fetchPublishedPlaceName()
+	if not publishedName then
+		return
+	end
+	studioPlaceName = publishedName
+	local suggested = suggestedOutputFolderName(publishedName)
+	outputInput.PlaceholderText = suggested
+	if outputInput.Text == initialOutputText then
+		outputInput.Text = suggested
+	end
+end)
 
 local divider = Instance.new("Frame")
 divider.Size = UDim2.new(1, -20, 0, 1)
@@ -397,21 +495,39 @@ end
 
 local includeUiGetter
 local includeObjectsGetter
+local includeUiRow
+local includeObjectsRow
+local settingsExpanded = false
 do
-	local rowUi, getterUi = createCheckbox("Include UI", false)
-	rowUi.Name = "IncludeUiRow"
-	rowUi.Size = UDim2.new(0.5, -6, 0, 28)
-	rowUi.Position = UDim2.fromOffset(0, 116)
-	rowUi.Parent = settings
+	local getterUi
+	includeUiRow, getterUi = createCheckbox("Include UI", false)
+	includeUiRow.Name = "IncludeUiRow"
+	includeUiRow.Size = UDim2.new(0.5, -6, 0, 28)
+	includeUiRow.Parent = settings
 	includeUiGetter = getterUi
 
-	local rowObj, getterObj = createCheckbox("Include Objects", false)
-	rowObj.Name = "IncludeObjectsRow"
-	rowObj.Size = UDim2.new(0.5, -6, 0, 28)
-	rowObj.Position = UDim2.new(0.5, 6, 0, 116)
-	rowObj.Parent = settings
+	local getterObj
+	includeObjectsRow, getterObj = createCheckbox("Include Objects", false)
+	includeObjectsRow.Name = "IncludeObjectsRow"
+	includeObjectsRow.Size = UDim2.new(0.5, -6, 0, 28)
+	includeObjectsRow.Parent = settings
 	includeObjectsGetter = getterObj
 end
+
+local function applySettingsExpanded()
+	settingsBody.Visible = settingsExpanded
+	local rowsY = settingsExpanded and 120 or 34
+	includeUiRow.Position = UDim2.fromOffset(0, rowsY)
+	includeObjectsRow.Position = UDim2.new(0.5, 6, 0, rowsY)
+	settingsToggle.Text = settingsExpanded and "Settings v" or "Settings >"
+end
+
+settingsToggle.MouseButton1Click:Connect(function()
+	settingsExpanded = not settingsExpanded
+	applySettingsExpanded()
+end)
+
+applySettingsExpanded()
 
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -20, 0, 18)
@@ -1551,7 +1667,7 @@ local function buildPayload()
 	local includeUi = includeUiGetter and includeUiGetter() or false
 	local includeObjects = includeObjectsGetter and includeObjectsGetter() or false
 	return {
-		studioPlaceName = game.Name,
+		studioPlaceName = studioPlaceName,
 		generatedAt = os.time(),
 		outputFolderName = (outputInput.Text and #outputInput.Text > 0) and outputInput.Text or "output",
 		exportFlags = {
@@ -1569,7 +1685,7 @@ local function buildInstancesPayload()
 	local includeObjects = includeObjectsGetter and includeObjectsGetter() or false
 	if not includeUi and not includeObjects then
 		return {
-			studioPlaceName = game.Name,
+			studioPlaceName = studioPlaceName,
 			generatedAt = os.time(),
 			outputFolderName = (outputInput.Text and #outputInput.Text > 0) and outputInput.Text or "output",
 			exportFlags = {
@@ -1615,7 +1731,7 @@ local function buildInstancesPayload()
 	end
 
 	return {
-		studioPlaceName = game.Name,
+		studioPlaceName = studioPlaceName,
 		generatedAt = os.time(),
 		outputFolderName = (outputInput.Text and #outputInput.Text > 0) and outputInput.Text or "output",
 		exportFlags = {
