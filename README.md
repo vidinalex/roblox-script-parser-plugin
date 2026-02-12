@@ -22,13 +22,14 @@ Minimal plugin + local server to export Studio scripts to disk.
    - New local instance files can be created and synced as added items (e.g. `StarterGui/MyUi.ScreenGui`).
 
 ## Output
-- Default: `<Service>/<...>/<ScriptName>.<type>.lua`
+- Root folder: `projects/<Output folder name>/` (for example: `projects/MyGame_output/`)
+- Default structure: `<Service>/<...>/<ScriptName>.<type>.lua`
 - If a script contains other scripts, it becomes a folder: `<Service>/<...>/<ScriptName>/<ScriptName>.<type>.lua` (nested scripts are written alongside it)
 - Extensions: `.server.lua` (Script), `.module.lua` (ModuleScript), `.local.lua` (LocalScript)
 - UI/Objects: `<Service>/<...>/<Name>.<ClassName>` containing JSON (when enabled)
 
 ## Notes
 - Large exports are chunked into multiple requests to avoid the 1MB limit.
-- Output root can be overridden with `RBX_PARSE_OUT` env var.
+- Output root can be overridden with `RBX_PARSE_OUT` env var. Relative paths are resolved under `projects/`; absolute paths are used as-is.
 - Instance diffs normalize float precision via `RBX_PARSE_FLOAT_DECIMALS` (default `5`) to reduce noise.
 - Sync uses the local server `/diff` endpoint to compare exported files against current Studio sources.
